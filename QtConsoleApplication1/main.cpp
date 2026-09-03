@@ -51,6 +51,35 @@ QByteArray prepareSnmpGet(const QByteArray& oidBytes) {
 	return packet;
 }
 
+
+
+QByteArray encodeOidComponent(quint64 value)
+{
+	if (value == 0)
+		return QByteArray(1, '\x00');
+
+	// Сначала получаем 7-битные группы (младшие сначала)
+	QList<quint8> groups;
+	while (value > 0) 
+	{
+		groups.prepend(static_cast<quint8>(value & 0x7F));
+		value >>= 7;
+	}
+
+	// Теперь ставим флаг продолжения (0x80) на все байты, кроме последнего
+	QByteArray res;
+	for (int i = 0; i < groups.size(); ++i) 
+	{
+		quint8 b = groups[i];
+		if (i != groups.size() - 1)
+			b |= 0x80;
+		res.append(static_cast<char>(b));
+	}
+	return res;
+}
+
+
+
 int main(int argc, char* argv[])
 {
 	QCoreApplication app(argc, argv);
@@ -68,18 +97,18 @@ int main(int argc, char* argv[])
 	// 06 - длина поля
 	// 7075626c6963 - Comunity = public (в ASCII)
 
-    // Запрос и его подноготная 
-    // a0 - маркер контекстного типа Get-Request PDU
-    // 1c - размер этого PDU (28 байт = всё, что идёт после)            
-    // 02 - маркер типа INTEGER (для Request ID)
-    // 04 - длина поля (4 байта)
-    // 00000001 - само значение Request ID
-    // 02 - маркер типа INTEGER (для Error Status)
-    // 01 - длина поля (1 байт)
-    // 00 - значение ошибки: noError (0)
-    // 02 - маркер типа INTEGER (для Error Index)
-    // 01 - длина поля (1 байт)
-    // 00 - значение индекса ошибки: 0
+	// Запрос и его подноготная 
+	// a0 - маркер контекстного типа Get-Request PDU
+	// 1c - размер этого PDU (28 байт = всё, что идёт после)            
+	// 02 - маркер типа INTEGER (для Request ID)
+	// 04 - длина поля (4 байта)
+	// 00000001 - само значение Request ID
+	// 02 - маркер типа INTEGER (для Error Status)
+	// 01 - длина поля (1 байт)
+	// 00 - значение ошибки: noError (0)
+	// 02 - маркер типа INTEGER (для Error Index)
+	// 01 - длина поля (1 байт)
+	// 00 - значение индекса ошибки: 0
 
 	// Список переменных (Varbind List)
 	// 30 - отделитель и список переменных
@@ -93,31 +122,70 @@ int main(int argc, char* argv[])
 	// OID
 	// 0500 - конец запроса
 
-
-	QByteArray generalPacket = "302902010104067075626c6963a01c020400000001020100020100300e300c0608";
+	//QByteArray generalPacket = "302902010104067075626c6963a01c020400000001020100020100300e300c0608";
 	//302c02010104067075626c6963a01f02040e33fb7d0201000201003011300f060b
 
-//2b06010201010500 - имя
-//2b06010401829521010200 - модель
-	QByteArray queryPacket = "2b06010201010500"; // OID 1.3.6.1.2.1.1.5.0 - получение имени
+	//2b06010201010500 - имя
+	//2b06010401829521010200 - модель
+	//QByteArray queryPacket = "2b06010201010500"; // OID 1.3.6.1.2.1.1.5.0 - получение имени
+	//QByteArray ending = "0500";
+	//QByteArray fullPacket = generalPacket + queryPacket + ending;
+	//QByteArray binaryPacket = QByteArray::fromHex(fullPacket);
+
+	QByteArray nameOID = "2b06010201010500"; // 1.3.6.1.2.1.1.5.0
+	QByteArray modelOID = "2b06010401829521010200"; // 1.3.6.1.4.1.35489.1.2.0
+
+	QString decOID = "1.3.6.1.4.1.35489.1.2.0";
+	QString fullStringHexOID;
+	QString temp;
+
+	int counterForOID = 0;
+
+	if (!decOID.isEmpty())
+	{
+		int first;
+		int second;
+		QString temp;
+
+		for (QString val : decOID)
+		{
+			if (val == ".")
+			{
+				if (counterForOID == 0)
+					first = temp.toInt();
+
+				if (counterForOID == 1)
+				{
+					second = temp.toInt();
+					fullStringHexOID += QString("%1").arg(QString::number((40 * first + second), 16), 2, QChar('0'));
+				}
+
+				if (counterForOID > 1)
+				{
+					if (temp.toInt() > 127)
+						fullStringHexOID += encodeOidComponent(temp.toInt()).toHex();
+					else
+						fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
+				}
+
+				++counterForOID;
+				temp.clear();
+				continue;
+			}
+
+			temp += val;
+		}
+		qDebug() << fullStringHexOID;
+	}
 
 
-	QByteArray ending = "0500";
+	QByteArray sendOID = modelOID; //////////////////////////////////////
 
-	QByteArray fullPacket = generalPacket + queryPacket + ending;
+	QByteArray packet = prepareSnmpGet(QByteArray::fromHex(sendOID));
 
-	QByteArray binaryPacket = QByteArray::fromHex(fullPacket);
+	udpSocket.writeDatagram(packet, routerAddress, snmpPort);
 
-
-
-	//QByteArray packet1 = prepareSnmpGet(QByteArray::fromHex("2b06010201010500"));
-	QByteArray packet1 = prepareSnmpGet(QByteArray::fromHex("2b06010401829521010200"));
-
-
-
-	udpSocket.writeDatagram(packet1, routerAddress, snmpPort);
-
-	qDebug() << "TX >> " << packet1;
+	qDebug() << "TX >> " << packet.toHex();
 
 	// Ожидание и чтение ответа
 	if (udpSocket.waitForReadyRead(3000))
@@ -132,7 +200,7 @@ int main(int argc, char* argv[])
 
 			qDebug() << "RX <<" << responseData.toHex();
 
-			int byteIndex = responseData.indexOf(QByteArray::fromHex(queryPacket)); // OID (Object Identifier) запрос имени устрйоства
+			int byteIndex = responseData.indexOf(QByteArray::fromHex(sendOID)); // OID (Object Identifier) запрос имени устрйоства
 			qDebug() << "Index in bytes:" << byteIndex;
 
 			if (byteIndex != -1) {
@@ -140,7 +208,7 @@ int main(int argc, char* argv[])
 				responseData.remove(0, byteIndex);
 				qDebug() << "After slice to OID:" << responseData.toHex();
 
-				int lengthPos = 8 + 1;
+				int lengthPos = (sendOID.length() / 2) + 1;
 
 				//9 - й байт(индекс 8) — это маркер типа 0x04 (OctetString).10 - й байт(индекс 9) — это длина строки.
 
