@@ -1,6 +1,8 @@
 #include <QtCore/QCoreApplication>
 #include <QUdpSocket>
 #include <QDebug>
+#include <iostream>
+
 
 QByteArray prepareSnmpGet(const QByteArray& oidBytes) {
 	QByteArray packet;
@@ -60,7 +62,7 @@ QByteArray encodeOidComponent(quint64 value)
 
 	// Сначала получаем 7-битные группы (младшие сначала)
 	QList<quint8> groups;
-	while (value > 0) 
+	while (value > 0)
 	{
 		groups.prepend(static_cast<quint8>(value & 0x7F));
 		value >>= 7;
@@ -68,7 +70,7 @@ QByteArray encodeOidComponent(quint64 value)
 
 	// Теперь ставим флаг продолжения (0x80) на все байты, кроме последнего
 	QByteArray res;
-	for (int i = 0; i < groups.size(); ++i) 
+	for (int i = 0; i < groups.size(); ++i)
 	{
 		quint8 b = groups[i];
 		if (i != groups.size() - 1)
@@ -86,6 +88,8 @@ int main(int argc, char* argv[])
 
 	QUdpSocket udpSocket;
 	QHostAddress routerAddress("10.86.146.118");
+	//QHostAddress routerAddress("10.0.245.138");
+
 	quint16 snmpPort = 161;
 
 	// 30 - признак самого SNMP запроса
@@ -132,107 +136,287 @@ int main(int argc, char* argv[])
 	//QByteArray fullPacket = generalPacket + queryPacket + ending;
 	//QByteArray binaryPacket = QByteArray::fromHex(fullPacket);
 
-	QByteArray nameOID = "2b06010201010500"; // 1.3.6.1.2.1.1.5.0
-	QByteArray modelOID = "2b06010401829521010200"; // 1.3.6.1.4.1.35489.1.2.0
+	QByteArray nameOID = "2b06010201010500"; // 1.3.6.1.2.1.1.5.0  имя
+	QByteArray modelOID = "2b06010401829521010200"; // 1.3.6.1.4.1.35489.1.2.0  модель
 
-	QString decOID = "1.3.6.1.4.1.35489.1.2.0";
-	QString fullStringHexOID;
-	QString temp;
+	QList<QString>routerMask = { "TCP", routerAddress.toString() };
 
-	int counterForOID = 0;
-
-	if (!decOID.isEmpty())
+	QList<QString> arrSNMP = 
 	{
-		int first;
-		int second;
-		QString temp;
+   // Info
+   "1.3.6.1.4.1.35489.1.2.0", // infoModel       — модель роутера (например RL21l)
+   "1.3.6.1.4.1.35489.1.3.0", // infoSN          — серийный номер
+   "1.3.6.1.4.1.35489.1.4.0", // infoFV          — версия прошивки
 
-		for (QString val : decOID)
+   // model
+   "1.3.6.1.4.1.35489.4.2.1.1.1",
+   "1.3.6.1.4.1.35489.4.2.1.1.2",
+
+   // SIM number / slot index
+   "1.3.6.1.4.1.35489.4.2.1.3.1",
+   "1.3.6.1.4.1.35489.4.2.1.3.2",
+
+   // IMSI
+   "1.3.6.1.4.1.35489.4.2.1.24.1",
+   "1.3.6.1.4.1.35489.4.2.1.24.2",
+
+   // registration
+   "1.3.6.1.4.1.35489.4.2.1.5.1",
+   "1.3.6.1.4.1.35489.4.2.1.5.2",
+
+   // operator
+   "1.3.6.1.4.1.35489.4.2.1.4.1",
+   "1.3.6.1.4.1.35489.4.2.1.4.2",
+
+   // IP address
+   "1.3.6.1.4.1.35489.4.2.1.11.1",
+   "1.3.6.1.4.1.35489.4.2.1.11.2",
+
+   /*// revision
+   "1.3.6.1.4.1.35489.4.2.1.2.1",
+   "1.3.6.1.4.1.35489.4.2.1.2.2",*/
+
+   /*// technology
+   "1.3.6.1.4.1.35489.4.2.1.6.1",
+   "1.3.6.1.4.1.35489.4.2.1.6.2",
+
+   // signal strength
+   "1.3.6.1.4.1.35489.4.2.1.7.1",
+   "1.3.6.1.4.1.35489.4.2.1.7.2",
+
+   // CSQ
+   "1.3.6.1.4.1.35489.4.2.1.8.1",
+   "1.3.6.1.4.1.35489.4.2.1.8.2",
+
+   // upTime
+   "1.3.6.1.4.1.35489.4.2.1.9.1",
+   "1.3.6.1.4.1.35489.4.2.1.9.2",
+
+   // connectTime (unix time)
+   "1.3.6.1.4.1.35489.4.2.1.10.1",
+   "1.3.6.1.4.1.35489.4.2.1.10.2",
+
+   // PLMN
+   "1.3.6.1.4.1.35489.4.2.1.12.1",
+   "1.3.6.1.4.1.35489.4.2.1.12.2",
+
+   // Cell ID
+   "1.3.6.1.4.1.35489.4.2.1.13.1",
+   "1.3.6.1.4.1.35489.4.2.1.13.2",
+
+   // LAC
+   "1.3.6.1.4.1.35489.4.2.1.14.1",
+   "1.3.6.1.4.1.35489.4.2.1.14.2",
+
+   // ICCID
+   "1.3.6.1.4.1.35489.4.2.1.15.1",
+   "1.3.6.1.4.1.35489.4.2.1.15.2",
+
+   // IMEI
+   "1.3.6.1.4.1.35489.4.2.1.16.1",
+   "1.3.6.1.4.1.35489.4.2.1.16.2",
+
+   // BAND
+   "1.3.6.1.4.1.35489.4.2.1.17.1",
+   "1.3.6.1.4.1.35489.4.2.1.17.2",
+
+   // BANDS LTE
+   "1.3.6.1.4.1.35489.4.2.1.18.1",
+   "1.3.6.1.4.1.35489.4.2.1.18.2",
+
+   // BANDS GSM/WCDMA
+   "1.3.6.1.4.1.35489.4.2.1.19.1",
+   "1.3.6.1.4.1.35489.4.2.1.19.2",
+
+   // RSRP
+   "1.3.6.1.4.1.35489.4.2.1.20.1",
+   "1.3.6.1.4.1.35489.4.2.1.20.2",
+
+   // RSRQ
+   "1.3.6.1.4.1.35489.4.2.1.21.1",
+   "1.3.6.1.4.1.35489.4.2.1.21.2",
+
+   // RSSI
+   "1.3.6.1.4.1.35489.4.2.1.22.1",
+   "1.3.6.1.4.1.35489.4.2.1.22.2",
+
+   // SINR
+   "1.3.6.1.4.1.35489.4.2.1.23.1",
+   "1.3.6.1.4.1.35489.4.2.1.23.2",
+   */
+	};
+
+	for (auto& val : arrSNMP)
+	{
+		QString fullStringHexOID;
+		QString decOID = val;
+		int counterForOID = 0;
+
+		if (!decOID.isEmpty())
 		{
-			if (val == ".")
+			int first;
+			int second;
+			QString temp;
+
+			for (QString val : decOID)
 			{
-				if (counterForOID == 0)
-					first = temp.toInt();
-
-				if (counterForOID == 1)
+				if (val == ".")
 				{
-					second = temp.toInt();
-					fullStringHexOID += QString("%1").arg(QString::number((40 * first + second), 16), 2, QChar('0'));
+					if (counterForOID == 0)
+						first = temp.toInt();
+
+					if (counterForOID == 1)
+					{
+						second = temp.toInt();
+						fullStringHexOID += QString("%1").arg(QString::number((40 * first + second), 16), 2, QChar('0'));
+					}
+
+					if (counterForOID > 1)
+					{
+						if (temp.toInt() > 127)
+							fullStringHexOID += encodeOidComponent(temp.toInt()).toHex();
+						else
+							fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
+					}
+
+					++counterForOID;
+					temp.clear();
+					continue;
 				}
 
-				if (counterForOID > 1)
-				{
-					if (temp.toInt() > 127)
-						fullStringHexOID += encodeOidComponent(temp.toInt()).toHex();
-					else
-						fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
-				}
-
-				++counterForOID;
-				temp.clear();
-				continue;
+				temp += val;
 			}
 
-			temp += val;
+			fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
+			temp.clear();
 		}
-		qDebug() << fullStringHexOID;
+
+		QByteArray sendOID = QByteArray::fromHex(fullStringHexOID.toUtf8());
+		qDebug() << "sendOID" << sendOID.toHex();
+
+		QByteArray packet = prepareSnmpGet(sendOID);
+
+		udpSocket.writeDatagram(packet, routerAddress, snmpPort);
+
+		qDebug() << "TX >> " << packet.toHex();
+
+		// Ожидание и чтение ответа
+		if (udpSocket.waitForReadyRead(3000))
+		{
+			while (udpSocket.hasPendingDatagrams())
+			{
+				QByteArray responseData;
+
+				responseData.resize(udpSocket.pendingDatagramSize()); // подгоняем размер массива под размер пришеднего ответа
+
+				udpSocket.readDatagram(responseData.data(), responseData.size());
+
+				qDebug() << "RX <<" << responseData.toHex();
+
+				int byteIndex = responseData.indexOf(sendOID); // OID (Object Identifier) запрос имени устрйоства
+				qDebug() << "Index in bytes:" << byteIndex;
+
+				if (byteIndex != -1)
+				{
+					// 2. Обрезаем всё, что ДО нашего OID
+					responseData.remove(0, byteIndex);
+					qDebug() << "After slice to OID:" << responseData.toHex();
+
+					int lengthPos = sendOID.length() + 1;
+
+					//9 - й байт(индекс 8) — это маркер типа 0x04 (OctetString).10 - й байт(индекс 9) — это длина строки.
+
+					if (lengthPos < responseData.size())
+					{
+						// Получаем байт длины строки после 
+						quint8 stringLength = static_cast<quint8>(responseData.at(lengthPos));
+
+						quint8 typeData = static_cast<quint8>(responseData.at(sendOID.length()));
+
+						qDebug() << "Type data = " << typeData;
+
+						qDebug() << "Length data answer = " << stringLength;
+
+						// Вырезаем саму строку, которая начинается сразу после байта длины
+						QByteArray nameBytes = responseData.mid(lengthPos + 1, stringLength);
+
+						// Преобразуем последовательность байт в строку
+
+						QString finalAnswer;
+
+						if (typeData == 4)
+						{
+							finalAnswer = QString::fromLocal8Bit(nameBytes);
+						}
+						else if (typeData == 2)
+						{
+							finalAnswer = QString::number(QString(nameBytes.toHex()).toInt());
+						}
+						else if (typeData == 129)
+						{
+							finalAnswer = "noSuchInstance";
+						}
+						else if (typeData == 128)
+						{
+							finalAnswer = "noSuchObject";
+						}
+						else if (typeData == 64)
+						{
+							quint8 b0 = static_cast<quint8>(nameBytes[0]);
+							quint8 b1 = static_cast<quint8>(nameBytes[1]);
+							quint8 b2 = static_cast<quint8>(nameBytes[2]);
+							quint8 b3 = static_cast<quint8>(nameBytes[3]);
+
+							QString ip = QString("%1.%2.%3.%4")
+								.arg(b0).arg(b1).arg(b2).arg(b3);
+
+							finalAnswer = ip;
+						}
+
+						qDebug() << "Answer:" << finalAnswer << "\n\n\n";
+						routerMask << val << finalAnswer;
+					}
+				}
+				else
+					qDebug() << "Error: OID not found";
+			}
+		}
 	}
 
-
-	QByteArray sendOID = modelOID; //////////////////////////////////////
-
-	QByteArray packet = prepareSnmpGet(QByteArray::fromHex(sendOID));
-
-	udpSocket.writeDatagram(packet, routerAddress, snmpPort);
-
-	qDebug() << "TX >> " << packet.toHex();
-
-	// Ожидание и чтение ответа
-	if (udpSocket.waitForReadyRead(3000))
+	int counter = 0;
+	for (auto& val : routerMask)
 	{
-		while (udpSocket.hasPendingDatagrams())
+		if (counter == 2)
 		{
-			QByteArray responseData;
-
-			responseData.resize(udpSocket.pendingDatagramSize()); // подгоняем размер массива под размер пришеднего ответа
-
-			udpSocket.readDatagram(responseData.data(), responseData.size());
-
-			qDebug() << "RX <<" << responseData.toHex();
-
-			int byteIndex = responseData.indexOf(QByteArray::fromHex(sendOID)); // OID (Object Identifier) запрос имени устрйоства
-			qDebug() << "Index in bytes:" << byteIndex;
-
-			if (byteIndex != -1) {
-				// 2. Обрезаем всё, что ДО нашего OID
-				responseData.remove(0, byteIndex);
-				qDebug() << "After slice to OID:" << responseData.toHex();
-
-				int lengthPos = (sendOID.length() / 2) + 1;
-
-				//9 - й байт(индекс 8) — это маркер типа 0x04 (OctetString).10 - й байт(индекс 9) — это длина строки.
-
-				if (lengthPos < responseData.size())
-				{
-					// Получаем байт длины строки после 
-					quint8 stringLength = static_cast<quint8>(responseData.at(lengthPos));
-
-					qDebug() << "Length data name device = " << stringLength;
-
-					// Вырезаем саму строку, которая начинается сразу после байта длины
-					QByteArray nameBytes = responseData.mid(lengthPos + 1, stringLength);
-
-					// Преобразуем последовательность байт в строку
-					QString deviceName = QString::fromLocal8Bit(nameBytes);
-					qDebug() << "Name device:" << deviceName;
-				}
-			}
-			else
-			{
-				qDebug() << "Error: OID not found";
-			}
+			std::cout << '\n';
+			counter = 0;
 		}
+		std::cout << val.toStdString() << "   ";
+		counter++;
 	}
+
+	if((routerMask[17] == "UNKNOWN" && routerMask[19] == "UNKNOWN") || (routerMask[21] == "0" && routerMask[23] == "0") || (routerMask[25] == "UNKNOWN" && routerMask[27] == "UNKNOWN") || (routerMask[29] == "0.0.0.0" && routerMask[31] == "0.0.0.0"))
+		qDebug() << "HUETA";
 
 	return app.exec();
 }
+
+
+/*
+TCP   10.86.146.118
+1.3.6.1.4.1.35489.1.2.0   RL21l
+1.3.6.1.4.1.35489.1.3.0   RDDC1000802
+1.3.6.1.4.1.35489.1.4.0   20.8
+1.3.6.1.4.1.35489.4.2.1.1.1   UNKNOWN
+1.3.6.1.4.1.35489.4.2.1.1.2   QUECTEL EC25
+1.3.6.1.4.1.35489.4.2.1.3.1   1
+1.3.6.1.4.1.35489.4.2.1.3.2   2
+1.3.6.1.4.1.35489.4.2.1.24.1   UNKNOWN
+1.3.6.1.4.1.35489.4.2.1.24.2   UNKNOWN
+1.3.6.1.4.1.35489.4.2.1.5.1   0
+1.3.6.1.4.1.35489.4.2.1.5.2   0
+1.3.6.1.4.1.35489.4.2.1.4.1   UNKNOWN
+1.3.6.1.4.1.35489.4.2.1.4.2   UNKNOWN
+1.3.6.1.4.1.35489.4.2.1.11.1   0.0.0.0
+1.3.6.1.4.1.35489.4.2.1.11.2   0.0.0.0
+*/
