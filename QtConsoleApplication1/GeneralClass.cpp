@@ -17,7 +17,8 @@ GeneralClass::~GeneralClass()
 
 
 
-QByteArray GeneralClass::prepareSnmpGet(const QByteArray& oidBytes) {
+QByteArray GeneralClass::prepareSnmpGet(const QByteArray& oidBytes) 
+{
 	QByteArray packet;
 
 	// 1. Фиксированная часть PDU внутри GetRequest (ID транзакции, статус ошибки, индекс ошибки)
@@ -97,6 +98,8 @@ QByteArray GeneralClass::encodeOidComponent(quint64 value)
 
 void GeneralClass::exchangeFunc(QString host)
 {
+	qDebug() << "SNMP query to " << host << '\n';
+
 	QUdpSocket udpSocket;
 	QHostAddress routerAddress(host);
 	quint16 snmpPort = 161;
@@ -392,6 +395,14 @@ void GeneralClass::exchangeFunc(QString host)
 		}
 	}
 
+	if (routerMask.length() <= 2) 
+	{
+		qDebug() << "HUETA"; //////////////////////////////
+
+		qDebug() << "\n\n\n";
+		return;
+	}
+
 	int counter = 0;
 	for (auto& val : routerMask)
 	{
@@ -406,6 +417,8 @@ void GeneralClass::exchangeFunc(QString host)
 
 	if ((routerMask[17] == "UNKNOWN" && routerMask[19] == "UNKNOWN") || (routerMask[21] == "0" && routerMask[23] == "0") || (routerMask[25] == "UNKNOWN" && routerMask[27] == "UNKNOWN") || (routerMask[29] == "0.0.0.0" && routerMask[31] == "0.0.0.0"))
 		qDebug() << "HUETA"; //////////////////////////////
+
+	qDebug() << "\n\n\n";
 
 	/*
 TCP   10.86.146.118
@@ -460,7 +473,7 @@ bool GeneralClass::readHostsFile()
 	file.close();
 
 	qDebug() << hostsArr;
-	qDebug() << "Count of Hosts = " << hostsArr.length();
+	qDebug() << "Count of Hosts = " << hostsArr.length() << "\n\n\n";
 
 	if (hostsArr.length() > 0)
 		return true;
