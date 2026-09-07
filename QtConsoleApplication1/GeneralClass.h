@@ -6,6 +6,7 @@
 #include <iostream>
 #include <QFile>
 #include <QCoreApplication>
+#include <QElapsedTimer>
 
 class GeneralClass  : public QObject
 {
@@ -21,7 +22,11 @@ public:
 	bool readHostsFile();
 
 private:
+	QElapsedTimer * queryTimeChecker = nullptr;
+
 	QList<QString>hostsArr;
+
+	QStringList problemDevice;
 
 	QList<QString> snmpName = { "RouterModel", "SN", "SoftVer", "ModelGSM_1", "ModelGSM_2", "IMSI_1", "IMSI_2", "Reg_1", "Reg_2", "Operator_1", "Operator_2", "IP_1", "IP_2" };
 

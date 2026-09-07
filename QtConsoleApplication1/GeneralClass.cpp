@@ -1,23 +1,29 @@
 #include "GeneralClass.h"
 
-GeneralClass::GeneralClass(QObject *parent)
+GeneralClass::GeneralClass(QObject* parent)
 	: QObject(parent)
 {
 	if (readHostsFile())
 	{
-		for(auto& val : hostsArr)
+		for (auto& val : hostsArr)
 			exchangeFunc(val);
+
+		qDebug() << "Problem device after SNMP query to hosts:\n";
+
+		for (auto& val : problemDevice)
+			qDebug() << val;
 	}
 }
 
 
 
 GeneralClass::~GeneralClass()
-{}
+{
+}
 
 
 
-QByteArray GeneralClass::prepareSnmpGet(const QByteArray& oidBytes) 
+QByteArray GeneralClass::prepareSnmpGet(const QByteArray& oidBytes)
 {
 	QByteArray packet;
 
@@ -98,6 +104,8 @@ QByteArray GeneralClass::encodeOidComponent(quint64 value)
 
 void GeneralClass::exchangeFunc(QString host)
 {
+	queryTimeChecker = new QElapsedTimer();
+
 	qDebug() << "SNMP query to " << host << '\n';
 
 	QUdpSocket udpSocket;
@@ -157,12 +165,14 @@ void GeneralClass::exchangeFunc(QString host)
 
 		QByteArray packet = prepareSnmpGet(sendOID);
 
-		udpSocket.writeDatagram(packet, routerAddress, snmpPort);
-
 		qDebug() << "TX >> " << packet.toHex();
 
+		udpSocket.writeDatagram(packet, routerAddress, snmpPort);
+
+		queryTimeChecker->start();
+
 		// ќжидание и чтение ответа
-		if (udpSocket.waitForReadyRead(3000))
+		if (udpSocket.waitForReadyRead(12000))
 		{
 			while (udpSocket.hasPendingDatagrams())
 			{
@@ -172,7 +182,7 @@ void GeneralClass::exchangeFunc(QString host)
 
 				udpSocket.readDatagram(responseData.data(), responseData.size());
 
-				qDebug() << "RX <<" << responseData.toHex();
+				qDebug() << "RX (" + QString::number(queryTimeChecker->elapsed()) + " msec) <<" << responseData.toHex();
 
 				int byteIndex = responseData.indexOf(sendOID); // OID (Object Identifier) запрос имени устрйоства
 				qDebug() << "Index in bytes:" << byteIndex;
@@ -239,20 +249,29 @@ void GeneralClass::exchangeFunc(QString host)
 					}
 				}
 				else
-					qDebug() << "Error: OID not found";
+				{
+					qDebug() << "Error: not found OID in answer";
+					routerMask << "Error: not found OID in answer";
+				}
 			}
+		}
+		else
+		{
+			qDebug() << "Error: timeout for answer";
+			routerMask << "Error: timeout for answer";
 		}
 	}
 
-	if (routerMask.length() <= 2) 
+	if (routerMask.length() < 28)
 	{
-		qDebug() << "HUETA"; //////////////////////////////
+		problemDevice << routerAddress.toString();
 
 		qDebug() << "\n\n\n";
 		return;
 	}
 
 	int counter = 0;
+
 	for (auto& val : routerMask)
 	{
 		if (counter == 2)
@@ -265,7 +284,18 @@ void GeneralClass::exchangeFunc(QString host)
 	}
 
 	if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[17] == "0" && routerMask[19] == "0") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
-		qDebug() << "\n\nHUETA"; //////////////////////////////
+	{
+		int counter = 0;
+
+		for (auto& val : routerMask)
+		{
+			if (counter%2)
+			{
+				problemDevice << routerMask[counter - 1] + "   " + routerMask[counter];
+			}
+			counter++;
+		}
+	}
 
 	qDebug() << "\n\n\n";
 }
