@@ -1,18 +1,10 @@
 #include "GeneralClass.h"
 
 GeneralClass::GeneralClass(QObject* parent)
-	: QObject(parent)
+	: QObject(parent), messegeMaxClass(new MaxClass)
 {
 	if (readHostsFile())
-	{
-		for (auto& val : hostsArr)
-			exchangeFunc(val);
-
-		qDebug() << "Problem device after SNMP query to hosts:\n";
-
-		for (auto& val : problemDevice)
-			qDebug() << val;
-	}
+		mainFuncForCheck();
 }
 
 
@@ -283,21 +275,10 @@ void GeneralClass::exchangeFunc(QString host)
 		counter++;
 	}
 
-	if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[17] == "0" && routerMask[19] == "0") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
+	if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
 	{
-		int counter = 0;
-
-		for (auto& val : routerMask)
-		{
-			if (counter%2)
-			{
-				problemDevice << routerMask[counter - 1] + "   " + routerMask[counter];
-			}
-			counter++;
-		}
+		problemDevice << routerMask[1];
 	}
-
-	qDebug() << "\n\n\n";
 }
 
 
@@ -339,4 +320,24 @@ bool GeneralClass::readHostsFile()
 		return true;
 	else
 		return false;
+}
+
+
+
+void GeneralClass::mainFuncForCheck()
+{
+	for (auto& val : hostsArr)
+		exchangeFunc(val);
+
+	qDebug() << "Problem device after SNMP query to hosts:\n";
+
+	QString temp = "Problems with next routers:\n";
+
+	for (auto& val : problemDevice)
+	{
+		qDebug() << val;
+		temp += val + "\n";
+	}
+
+	messegeMaxClass->sendMessage(temp);
 }

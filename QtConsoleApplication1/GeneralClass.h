@@ -8,6 +8,8 @@
 #include <QCoreApplication>
 #include <QElapsedTimer>
 
+#include "MaxClass.h"
+
 class GeneralClass  : public QObject
 {
 	Q_OBJECT
@@ -20,8 +22,11 @@ public:
 	QByteArray encodeOidComponent(quint64 value);
 	void exchangeFunc(QString host);
 	bool readHostsFile();
+	void mainFuncForCheck();
 
 private:
+	MaxClass* messegeMaxClass = nullptr;
+
 	QElapsedTimer * queryTimeChecker = nullptr;
 
 	QList<QString>hostsArr;

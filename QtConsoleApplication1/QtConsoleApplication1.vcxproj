@@ -95,9 +95,13 @@
   <ItemGroup>
     <ClCompile Include="GeneralClass.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="MaxClass.cpp" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="GeneralClass.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <QtMoc Include="MaxClass.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Condition="Exists('$(QtMsBuild)\qt.targets')">

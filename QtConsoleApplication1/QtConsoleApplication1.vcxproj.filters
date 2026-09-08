@@ -29,9 +29,15 @@
     <ClCompile Include="GeneralClass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="MaxClass.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="GeneralClass.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
+    <QtMoc Include="MaxClass.h">
       <Filter>Header Files</Filter>
     </QtMoc>
   </ItemGroup>
