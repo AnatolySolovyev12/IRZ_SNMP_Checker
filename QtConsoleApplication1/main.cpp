@@ -1,9 +1,13 @@
 #include <QtCore/QCoreApplication>
 #include "GeneralClass.h"
 
+#include <qwidget.h>
+#include <QApplication>
+#include <Windows.h>
+
 int main(int argc, char* argv[])
 {
-	QCoreApplication app(argc, argv);
+	QApplication app(argc, argv);
 
 	GeneralClass * myGeneral = new GeneralClass(nullptr);
 	

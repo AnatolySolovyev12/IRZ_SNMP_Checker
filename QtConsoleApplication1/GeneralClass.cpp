@@ -1,10 +1,28 @@
 #include "GeneralClass.h"
 
 GeneralClass::GeneralClass(QObject* parent)
-	: QObject(parent), messegeMaxClass(new MaxClass)
+	: QObject(parent), messegeMaxClass(new MaxClass), recursionTimer(new QTimer)
 {
+	trayIcon = new QSystemTrayIcon();
+	trayIcon->setIcon(QIcon(QCoreApplication::applicationDirPath() + "\\icon.png"));
+
+	menu = new QMenu();
+	restoreActionOpenCLI = menu->addAction("CMD open and connect");
+	restoreActionHideCLI = menu->addAction("CMD disconnect");
+	quitAction = menu->addAction("Exit");
+
+	trayIcon->setContextMenu(menu);
+	trayIcon->setVisible(true);
+
+	connect(restoreActionOpenCLI, &QAction::triggered, this, &GeneralClass::cmdOpen);
+	connect(restoreActionHideCLI, &QAction::triggered, this, &GeneralClass::cmdClose);
+	connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
+	connect(trayIcon, &QSystemTrayIcon::activated, this, &GeneralClass::iconActivated);
+	
 	if (readHostsFile())
 		mainFuncForCheck();
+
+	connect(recursionTimer, &QTimer::timeout, this, &GeneralClass::mainFuncForCheck);
 }
 
 
@@ -13,6 +31,33 @@ GeneralClass::~GeneralClass()
 {
 }
 
+
+
+void GeneralClass::iconActivated(QSystemTrayIcon::ActivationReason reason)
+{
+	if (reason == QSystemTrayIcon::ActivationReason::DoubleClick)
+	{
+		trayIcon->showMessage("Next start:",  QTime::currentTime().addSecs(recursionTimer->remainingTime() / 1000).toString(), QSystemTrayIcon::Information, 5000);
+	}
+}
+
+
+
+void GeneralClass::cmdOpen()
+{
+	AllocConsole(); // Создаем консоль и присоединяем к ней текущий процесс
+	FILE* stream; // то через что перенаправляем поток. Без данной переменной приложение будет крашится
+	freopen_s(&stream, "CONOUT$", "w", stdout); // Перенаправляем стандартный вывод в CONOUT$
+	freopen_s(&stream, "CONOUT$", "w", stderr); // Перенаправляем стандартный вывод ошибок в CONOUT$
+}
+
+
+void GeneralClass::cmdClose()
+{
+	qDebug() << "\nProgramm disconnect from console.";
+
+	FreeConsole(); // Отделяем процесс от cmd. После cmd закрываем руками.
+}
 
 
 QByteArray GeneralClass::prepareSnmpGet(const QByteArray& oidBytes)
@@ -256,7 +301,7 @@ void GeneralClass::exchangeFunc(QString host)
 
 	if (routerMask.length() < 28)
 	{
-		problemDevice << routerAddress.toString();
+		problemDevice << routerAddress.toString() + " - length answer is less then 28";
 
 		qDebug() << "\n\n\n";
 		return;
@@ -275,9 +320,11 @@ void GeneralClass::exchangeFunc(QString host)
 		counter++;
 	}
 
+	qDebug() << "\n_________________________________________________________________________\n\n\n";
+
 	if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
 	{
-		problemDevice << routerMask[1];
+		problemDevice << routerMask[1] + " - apsent imsi/operator/ip";
 	}
 }
 
@@ -326,18 +373,29 @@ bool GeneralClass::readHostsFile()
 
 void GeneralClass::mainFuncForCheck()
 {
+	recursionTimer->stop();
+
 	for (auto& val : hostsArr)
 		exchangeFunc(val);
 
-	qDebug() << "Problem device after SNMP query to hosts:\n";
-
-	QString temp = "Problems with next routers:\n";
-
-	for (auto& val : problemDevice)
+	if (!problemDevice.isEmpty())
 	{
-		qDebug() << val;
-		temp += val + "\n";
-	}
+		qDebug() << "Problem device after SNMP query to hosts:\n";
 
-	messegeMaxClass->sendMessage(temp);
+		QString temp = "Problems with next routers:\n";
+
+		for (auto& val : problemDevice)
+		{
+			qDebug() << val;
+			temp += val + "\n";
+		}
+
+		messegeMaxClass->sendMessage(temp);
+
+		qDebug() << "\n\n\n";
+	}
+	else
+		qDebug() << "All devices are healthy\n\n\n";
+
+	recursionTimer->start(3600000);
 }

@@ -5,10 +5,30 @@
 #include <QDebug>
 #include <iostream>
 #include <QFile>
-#include <QCoreApplication>
+#include <QtCore/QCoreApplication>
 #include <QElapsedTimer>
 
 #include "MaxClass.h"
+
+
+#include <Qapplication>
+#include <QSystemTrayIcon>
+#include <QMenu>
+#include <QAction>
+
+#include <QInputDialog>
+
+
+/*
+void resetTimerForListHosts()
+{
+	qDebug() << "\nTimer for List Hosts was reset.";
+	hostsList->restartCycleFunc();
+}
+
+*/
+
+
 
 class GeneralClass  : public QObject
 {
@@ -24,10 +44,23 @@ public:
 	bool readHostsFile();
 	void mainFuncForCheck();
 
+	void cmdOpen();
+	void cmdClose();
+	void iconActivated(QSystemTrayIcon::ActivationReason reason);
+
+
 private:
+	QSystemTrayIcon* trayIcon = nullptr;
+	QMenu* menu = nullptr;
+	QAction* restoreActionOpenCLI = nullptr;
+	QAction* restoreActionHideCLI = nullptr;
+	QAction* quitAction = nullptr;
+
 	MaxClass* messegeMaxClass = nullptr;
 
 	QElapsedTimer * queryTimeChecker = nullptr;
+
+	QTimer* recursionTimer = nullptr;
 
 	QList<QString>hostsArr;
 

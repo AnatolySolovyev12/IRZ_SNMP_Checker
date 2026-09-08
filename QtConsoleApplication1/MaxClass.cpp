@@ -148,6 +148,8 @@ QString MaxClass::getChatIdFromFile()
 
 	file.close();
 
+	qDebug() << "";
+
 	return myLine;
 }
 
