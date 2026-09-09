@@ -18,11 +18,12 @@ GeneralClass::GeneralClass(QObject* parent)
 	connect(restoreActionHideCLI, &QAction::triggered, this, &GeneralClass::cmdClose);
 	connect(quitAction, &QAction::triggered, qApp, &QApplication::quit);
 	connect(trayIcon, &QSystemTrayIcon::activated, this, &GeneralClass::iconActivated);
-	
-	if (readHostsFile())
-		mainFuncForCheck();
 
 	connect(recursionTimer, &QTimer::timeout, this, &GeneralClass::mainFuncForCheck);
+
+	if (readHostsFile())
+		if (getOIDfromFile())
+			mainFuncForCheck();
 }
 
 
@@ -37,7 +38,7 @@ void GeneralClass::iconActivated(QSystemTrayIcon::ActivationReason reason)
 {
 	if (reason == QSystemTrayIcon::ActivationReason::DoubleClick)
 	{
-		trayIcon->showMessage("Next start:",  QTime::currentTime().addSecs(recursionTimer->remainingTime() / 1000).toString(), QSystemTrayIcon::Information, 5000);
+		trayIcon->showMessage("Next start:", QTime::currentTime().addSecs(recursionTimer->remainingTime() / 1000).toString(), QSystemTrayIcon::Information, 5000);
 	}
 }
 
@@ -342,17 +343,13 @@ bool GeneralClass::readHostsFile()
 
 	QTextStream out(&file);
 
-	bool portBool = false;
 	QString ip;
-	QString port;
 	QString* myLine = new QString();
 
 	while (out.readLineInto(myLine, 0))
 	{
 		hostsArr.push_back(*myLine);
 		ip.clear();
-		port.clear();
-		portBool = false;
 	}
 
 	delete myLine;
@@ -392,10 +389,49 @@ void GeneralClass::mainFuncForCheck()
 
 		messegeMaxClass->sendMessage(temp);
 
+		problemDevice.clear();
+
 		qDebug() << "\n\n\n";
 	}
 	else
 		qDebug() << "All devices are healthy\n\n\n";
 
 	recursionTimer->start(3600000);
+}
+
+
+
+bool GeneralClass::getOIDfromFile()
+{
+	QFile file(QCoreApplication::applicationDirPath() + "\\OID.txt");
+
+	if (!file.open(QIODevice::ReadOnly))
+	{
+		qDebug() << "Don't find OID file. Create file and try again";
+		return false;
+	}
+
+	QTextStream out(&file);
+	QString* myLine = new QString();
+
+	while (out.readLineInto(myLine, 0))
+	{
+		if (*myLine == "") continue;
+		myLine->trimmed();
+		myLine->remove(QRegularExpression(QString(R"(//.*)")));
+		arrSNMP.push_back(*myLine);
+	}
+
+	delete myLine;
+	myLine = nullptr;
+
+	file.close();
+
+	qDebug() << arrSNMP;
+	qDebug() << "Count of OID = " << arrSNMP.length() << "\n\n\n";
+
+	if (arrSNMP.length() > 0)
+		return true;
+	else
+		return false;
 }
