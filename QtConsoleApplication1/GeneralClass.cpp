@@ -150,182 +150,193 @@ void GeneralClass::exchangeFunc(QString host)
 	QHostAddress routerAddress(host);
 	quint16 snmpPort = 161;
 
-	QList<QString>routerMask = { "TCP", routerAddress.toString() };
-
-	for (auto& val : arrSNMP)
+	for (int counterTrying = 0; counterTrying <= 2; ++counterTrying)
 	{
-		QString fullStringHexOID;
-		QString decOID = val;
-		int counterForOID = 0;
+		QList<QString>routerMask = { "TCP", routerAddress.toString() };
 
-		if (!decOID.isEmpty())
+		for (auto& val : arrSNMP)
 		{
-			int first;
-			int second;
-			QString temp;
+			QString fullStringHexOID;
+			QString decOID = val;
+			int counterForOID = 0;
 
-			for (QString val : decOID)
+			if (!decOID.isEmpty())
 			{
-				if (val == ".")
+				int first;
+				int second;
+				QString temp;
+
+				for (QString val : decOID)
 				{
-					if (counterForOID == 0)
-						first = temp.toInt();
-
-					if (counterForOID == 1)
+					if (val == ".")
 					{
-						second = temp.toInt();
-						fullStringHexOID += QString("%1").arg(QString::number((40 * first + second), 16), 2, QChar('0'));
+						if (counterForOID == 0)
+							first = temp.toInt();
+
+						if (counterForOID == 1)
+						{
+							second = temp.toInt();
+							fullStringHexOID += QString("%1").arg(QString::number((40 * first + second), 16), 2, QChar('0'));
+						}
+
+						if (counterForOID > 1)
+						{
+							if (temp.toInt() > 127)
+								fullStringHexOID += encodeOidComponent(temp.toInt()).toHex();
+							else
+								fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
+						}
+
+						++counterForOID;
+						temp.clear();
+						continue;
 					}
 
-					if (counterForOID > 1)
-					{
-						if (temp.toInt() > 127)
-							fullStringHexOID += encodeOidComponent(temp.toInt()).toHex();
-						else
-							fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
-					}
-
-					++counterForOID;
-					temp.clear();
-					continue;
+					temp += val;
 				}
 
-				temp += val;
+				fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
+				temp.clear();
 			}
 
-			fullStringHexOID += QString("%1").arg(QString::number(temp.toInt(), 16), 2, QChar('0'));
-			temp.clear();
-		}
+			QByteArray sendOID = QByteArray::fromHex(fullStringHexOID.toUtf8());
 
-		QByteArray sendOID = QByteArray::fromHex(fullStringHexOID.toUtf8());
+			qDebug() << "sendOID" << sendOID.toHex();
 
-		qDebug() << "sendOID" << sendOID.toHex();
+			QByteArray packet = prepareSnmpGet(sendOID);
 
-		QByteArray packet = prepareSnmpGet(sendOID);
+			qDebug() << "TX >> " << packet.toHex();
 
-		qDebug() << "TX >> " << packet.toHex();
+			udpSocket.writeDatagram(packet, routerAddress, snmpPort);
 
-		udpSocket.writeDatagram(packet, routerAddress, snmpPort);
+			queryTimeChecker->start();
 
-		queryTimeChecker->start();
-
-		// Ожидание и чтение ответа
-		if (udpSocket.waitForReadyRead(12000))
-		{
-			while (udpSocket.hasPendingDatagrams())
+			// Ожидание и чтение ответа
+			if (udpSocket.waitForReadyRead(12000))
 			{
-				QByteArray responseData;
-
-				responseData.resize(udpSocket.pendingDatagramSize()); // подгоняем размер массива под размер пришеднего ответа
-
-				udpSocket.readDatagram(responseData.data(), responseData.size());
-
-				qDebug() << "RX (" + QString::number(queryTimeChecker->elapsed()) + " msec) <<" << responseData.toHex();
-
-				int byteIndex = responseData.indexOf(sendOID); // OID (Object Identifier) запрос имени устрйоства
-				qDebug() << "Index in bytes:" << byteIndex;
-
-				if (byteIndex != -1)
+				while (udpSocket.hasPendingDatagrams())
 				{
-					// 2. Обрезаем всё, что ДО нашего OID
-					responseData.remove(0, byteIndex);
-					qDebug() << "After slice to OID:" << responseData.toHex();
+					QByteArray responseData;
 
-					int lengthPos = sendOID.length() + 1;
+					responseData.resize(udpSocket.pendingDatagramSize()); // подгоняем размер массива под размер пришеднего ответа
 
-					//9 - й байт(индекс 8) — это маркер типа 0x04 (OctetString).10 - й байт(индекс 9) — это длина строки.
+					udpSocket.readDatagram(responseData.data(), responseData.size());
 
-					if (lengthPos < responseData.size())
+					qDebug() << "RX (" + QString::number(queryTimeChecker->elapsed()) + " msec) <<" << responseData.toHex();
+
+					int byteIndex = responseData.indexOf(sendOID); // OID (Object Identifier) запрос имени устрйоства
+					qDebug() << "Index in bytes:" << byteIndex;
+
+					if (byteIndex != -1)
 					{
-						// Получаем байт длины строки после 
-						quint8 stringLength = static_cast<quint8>(responseData.at(lengthPos));
+						// 2. Обрезаем всё, что ДО нашего OID
+						responseData.remove(0, byteIndex);
+						qDebug() << "After slice to OID:" << responseData.toHex();
 
-						quint8 typeData = static_cast<quint8>(responseData.at(sendOID.length()));
+						int lengthPos = sendOID.length() + 1;
 
-						qDebug() << "Type data = " << typeData;
+						//9 - й байт(индекс 8) — это маркер типа 0x04 (OctetString).10 - й байт(индекс 9) — это длина строки.
 
-						qDebug() << "Length data answer = " << stringLength;
-
-						// Вырезаем саму строку, которая начинается сразу после байта длины
-						QByteArray nameBytes = responseData.mid(lengthPos + 1, stringLength);
-
-						// Преобразуем последовательность байт в строку
-
-						QString finalAnswer;
-
-						if (typeData == 4)
+						if (lengthPos < responseData.size())
 						{
-							finalAnswer = QString::fromLocal8Bit(nameBytes);
-						}
-						else if (typeData == 2)
-						{
-							finalAnswer = QString::number(QString(nameBytes.toHex()).toInt());
-						}
-						else if (typeData == 129)
-						{
-							finalAnswer = "noSuchInstance";
-						}
-						else if (typeData == 128)
-						{
-							finalAnswer = "noSuchObject";
-						}
-						else if (typeData == 64)
-						{
-							quint8 b0 = static_cast<quint8>(nameBytes[0]);
-							quint8 b1 = static_cast<quint8>(nameBytes[1]);
-							quint8 b2 = static_cast<quint8>(nameBytes[2]);
-							quint8 b3 = static_cast<quint8>(nameBytes[3]);
+							// Получаем байт длины строки после 
+							quint8 stringLength = static_cast<quint8>(responseData.at(lengthPos));
 
-							QString ip = QString("%1.%2.%3.%4")
-								.arg(b0).arg(b1).arg(b2).arg(b3);
+							quint8 typeData = static_cast<quint8>(responseData.at(sendOID.length()));
 
-							finalAnswer = ip;
+							qDebug() << "Type data = " << typeData;
+
+							qDebug() << "Length data answer = " << stringLength;
+
+							// Вырезаем саму строку, которая начинается сразу после байта длины
+							QByteArray nameBytes = responseData.mid(lengthPos + 1, stringLength);
+
+							// Преобразуем последовательность байт в строку
+
+							QString finalAnswer;
+
+							if (typeData == 4)
+							{
+								finalAnswer = QString::fromLocal8Bit(nameBytes);
+							}
+							else if (typeData == 2)
+							{
+								finalAnswer = QString::number(QString(nameBytes.toHex()).toInt());
+							}
+							else if (typeData == 129)
+							{
+								finalAnswer = "noSuchInstance";
+							}
+							else if (typeData == 128)
+							{
+								finalAnswer = "noSuchObject";
+							}
+							else if (typeData == 64)
+							{
+								quint8 b0 = static_cast<quint8>(nameBytes[0]);
+								quint8 b1 = static_cast<quint8>(nameBytes[1]);
+								quint8 b2 = static_cast<quint8>(nameBytes[2]);
+								quint8 b3 = static_cast<quint8>(nameBytes[3]);
+
+								QString ip = QString("%1.%2.%3.%4")
+									.arg(b0).arg(b1).arg(b2).arg(b3);
+
+								finalAnswer = ip;
+							}
+
+							qDebug() << "Answer:" << finalAnswer << "\n\n\n";
+							routerMask << val + "   " + snmpName[arrSNMP.indexOf(val)] + "   " << finalAnswer;
 						}
-
-						qDebug() << "Answer:" << finalAnswer << "\n\n\n";
-						routerMask << val + "   " + snmpName[arrSNMP.indexOf(val)] + "   " << finalAnswer;
+					}
+					else
+					{
+						qDebug() << "Error: not found OID in answer" << "\n\n\n";
+						routerMask << val + "   " + snmpName[arrSNMP.indexOf(val)] + "   " << "Error: not found OID in answer";
 					}
 				}
-				else
-				{
-					qDebug() << "Error: not found OID in answer";
-					routerMask << "Error: not found OID in answer";
-				}
+			}
+			else
+			{
+				qDebug() << "Error: timeout for answer" << "\n\n\n";
+				routerMask << val + "   " + snmpName[arrSNMP.indexOf(val)] + "   " << "Error: timeout for answer";
 			}
 		}
-		else
+
+		int counter = 0;
+
+		for (auto& val : routerMask)
 		{
-			qDebug() << "Error: timeout for answer";
-			routerMask << "Error: timeout for answer";
+			if (counter == 2)
+			{
+				std::cout << '\n';
+				counter = 0;
+			}
+			std::cout << val.toStdString() << "   ";
+			counter++;
 		}
-	}
 
-	if (routerMask.length() < 28)
-	{
-		problemDevice << routerAddress.toString() + " - length answer is less then 28";
+		qDebug() << "\n_________________________________________________________________________\n\n\n";
 
-		qDebug() << "\n\n\n";
-		return;
-	}
-
-	int counter = 0;
-
-	for (auto& val : routerMask)
-	{
-		if (counter == 2)
+		if (routerMask.length() < 28)
 		{
-			std::cout << '\n';
-			counter = 0;
+			if (counterTrying < 2)
+				continue;
+			else
+			{
+				problemDevice << routerAddress.toString() + " - length answer is less then 28";
+				break;
+			}
 		}
-		std::cout << val.toStdString() << "   ";
-		counter++;
-	}
 
-	qDebug() << "\n_________________________________________________________________________\n\n\n";
+		if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
+		{
+			if (counterTrying < 2)
+				continue;
+			else
+				problemDevice << routerMask[1] + " - apsent imsi/operator/ip";
+		}
 
-	if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
-	{
-		problemDevice << routerMask[1] + " - apsent imsi/operator/ip";
+		break;
 	}
 }
 
@@ -414,10 +425,21 @@ bool GeneralClass::getOIDfromFile()
 	QTextStream out(&file);
 	QString* myLine = new QString();
 
+	// Берем OID-ы изи OID.txt, проверяем есть ли последовательность после OID //<описание>, очищаем OID от описание а само описание добавляем в отдельный массив.
 	while (out.readLineInto(myLine, 0))
 	{
 		if (*myLine == "") continue;
 		myLine->trimmed();
+
+		QRegularExpression pattern(QString(R"(//.*)"));
+
+		QRegularExpressionMatch matchReg = pattern.match(*myLine);
+
+		if (matchReg.hasMatch())
+			snmpName.push_back(matchReg.captured().remove("//"));
+		else
+			snmpName.push_back("noNameOID");
+
 		myLine->remove(QRegularExpression(QString(R"(//.*)")));
 		arrSNMP.push_back(*myLine);
 	}
