@@ -1,7 +1,7 @@
 #include "GeneralClass.h"
 
 GeneralClass::GeneralClass(QObject* parent)
-	: QObject(parent), messegeMaxClass(new MaxClass), recursionTimer(new QTimer)
+	: QObject(parent), messegeMaxClass(new MaxClass), recursionTimer(new QTimer), queryTimeChecker(new QElapsedTimer())
 {
 	trayIcon = new QSystemTrayIcon();
 	trayIcon->setIcon(QIcon(QCoreApplication::applicationDirPath() + "\\icon.png"));
@@ -142,8 +142,6 @@ QByteArray GeneralClass::encodeOidComponent(quint64 value)
 
 void GeneralClass::exchangeFunc(QString host)
 {
-	queryTimeChecker = new QElapsedTimer();
-
 	qDebug() << "SNMP query to " << host << '\n';
 
 	QUdpSocket udpSocket;
@@ -273,15 +271,20 @@ void GeneralClass::exchangeFunc(QString host)
 							}
 							else if (typeData == 64)
 							{
-								quint8 b0 = static_cast<quint8>(nameBytes[0]);
-								quint8 b1 = static_cast<quint8>(nameBytes[1]);
-								quint8 b2 = static_cast<quint8>(nameBytes[2]);
-								quint8 b3 = static_cast<quint8>(nameBytes[3]);
+								if (nameBytes.size() >= 4)
+								{
+									quint8 b0 = static_cast<quint8>(nameBytes[0]);
+									quint8 b1 = static_cast<quint8>(nameBytes[1]);
+									quint8 b2 = static_cast<quint8>(nameBytes[2]);
+									quint8 b3 = static_cast<quint8>(nameBytes[3]);
 
-								QString ip = QString("%1.%2.%3.%4")
-									.arg(b0).arg(b1).arg(b2).arg(b3);
+									QString ip = QString("%1.%2.%3.%4")
+										.arg(b0).arg(b1).arg(b2).arg(b3);
 
-								finalAnswer = ip;
+									finalAnswer = ip;
+								}
+								else
+									finalAnswer = "incorrect nameBytes.length() for IP";
 							}
 
 							qDebug() << "Answer:" << finalAnswer << "\n\n\n";
@@ -293,6 +296,8 @@ void GeneralClass::exchangeFunc(QString host)
 						qDebug() << "Error: not found OID in answer" << "\n\n\n";
 						routerMask << val + "   " + snmpName[arrSNMP.indexOf(val)] + "   " << "Error: not found OID in answer";
 					}
+
+					break; // защищаемся пришедшей больше чем одной датаграммы
 				}
 			}
 			else
@@ -328,7 +333,11 @@ void GeneralClass::exchangeFunc(QString host)
 			}
 		}
 
-		if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0"))
+		if ((routerMask[13] == "UNKNOWN" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "0.0.0.0") ||
+			(routerMask[13] == "UNKNOWN" && routerMask[15] == "Error: timeout for answer") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "Error: timeout for answer") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "Error: timeout for answer") || 
+			(routerMask[13] == "Error: timeout for answer" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "Error: timeout for answer" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "Error: timeout for answer" && routerMask[27] == "0.0.0.0") ||
+			(routerMask[13] == "UNKNOWN" && routerMask[15] == "Error: not found OID in answer") || (routerMask[21] == "UNKNOWN" && routerMask[23] == "Error: not found OID in answer") || (routerMask[25] == "0.0.0.0" && routerMask[27] == "Error: not found OID in answer") || 
+			(routerMask[13] == "Error: not found OID in answer" && routerMask[15] == "UNKNOWN") || (routerMask[21] == "Error: not found OID in answer" && routerMask[23] == "UNKNOWN") || (routerMask[25] == "Error: not found OID in answer" && routerMask[27] == "0.0.0.0"))
 		{
 			if (counterTrying < 2)
 				continue;
